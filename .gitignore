@@ -1,0 +1,9 @@
+node_modules/
+data/*.jsonl
+chaincode/trustmesh/trustmesh-chaincode.exe
+*.log
+drunix-platform/
+tmp/
+.env
+.env.*
+!.env.example

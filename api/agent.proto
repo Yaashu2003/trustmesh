@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package trustmesh.v1;
+
+option go_package = "trustmesh/api/gen/trustmesh/v1;trustmeshv1";
+
+service AgentSwarm {
+  rpc AnalyzeTransaction (AnalyzeTransactionRequest) returns (RiskAttestation);
+  rpc Health (HealthRequest) returns (HealthResponse);
+}
+
+message AnalyzeTransactionRequest {
+  string transaction_id = 1;
+  string sender_hash = 2;
+  string receiver_hash = 3;
+  int64 amount_paise = 4;
+  string issuer_org = 5;
+  string device_fingerprint = 6;
+  string sim_fingerprint = 7;
+  double hour_of_day = 8;
+  double jump_km = 9;
+  double jump_minutes = 10;
+  uint32 recent_sender_count = 11;
+  uint32 receiver_fan_in = 12;
+  repeated GraphEdge recent_edges = 13;
+}
+
+message GraphEdge {
+  string from_hash = 1;
+  string to_hash = 2;
+  int64 amount_paise = 3;
+  int64 age_seconds = 4;
+}
+
+message RiskAttestation {
+  string transaction_id = 1;
+  double tvp_score = 2;
+  double behavior_score = 3;
+  double graph_score = 4;
+  string verdict = 5;
+  string reason = 6;
+  string key_id = 7;
+  bytes signature = 8;
+}
+
+message HealthRequest {}
+message HealthResponse { string status = 1; string version = 2; }

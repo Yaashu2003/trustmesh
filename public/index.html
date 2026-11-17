@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f6fa">
+  <title>TrustMesh · Payment protection</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brand-mark">T</span><span>trustmesh<small>PAYMENT PROTECTION</small></span></a>
+    <div class="top-center"><span class="live-dot"></span><span>DRUNIX sandbox</span><i></i><span class="top-muted">Pre-settlement risk workbench</span></div>
+    <div class="top-right"><span class="network-indicator"><b></b> API connected</span><span class="avatar">TM</span></div>
+  </header>
+  <main class="shell">
+    <section class="heading-row">
+      <div><div class="eyebrow">TRUST & SAFETY / UPI NETWORK</div><h1>Payment protection</h1><p class="subhead">Screen transfers before settlement. Explore network relationships and review decisions.</p></div>
+      <div class="dataset-tag"><span class="dataset-icon">◈</span><span><b id="dataset-count">Loading network…</b><small>SYNTHETIC NETWORK · 4 BANKS</small></span></div>
+    </section>
+    <section class="metrics" aria-label="Network summary">
+      <article class="metric"><div class="metric-label">NETWORK PAYMENTS</div><div class="metric-value" id="metric-transactions">—</div><div class="metric-foot">synthetic history indexed</div></article>
+      <article class="metric"><div class="metric-label">ACCOUNTS MONITORED</div><div class="metric-value" id="metric-accounts">—</div><div class="metric-foot">across participating banks</div></article>
+      <article class="metric"><div class="metric-label">SCREENED THIS SESSION</div><div class="metric-value" id="metric-screened">0</div><div class="metric-foot">live decisions from this workbench</div></article>
+      <article class="metric"><div class="metric-label">PAYMENTS STOPPED</div><div class="metric-value" id="metric-blocked">0</div><div class="metric-foot"><span class="red-text" id="metric-stopped-amount">₹0</span> protected</div></article>
+    </section>
+
+    <section class="workspace">
+      <article class="panel graph-panel">
+        <div class="panel-head graph-head"><div><div class="panel-kicker">NETWORK INTELLIGENCE</div><h2>Knowledge graph</h2><p>Accounts, payments, and shared identity signals</p></div><div class="graph-tools"><label class="searchbox"><span>⌕</span><input id="entity-search" placeholder="Find account, VPA, merchant…" autocomplete="off"><kbd>⌘ K</kbd></label><select id="graph-depth" aria-label="Graph depth"><option value="1">1 hop</option><option selected value="2">2 hops</option><option value="3">3 hops</option></select></div></div>
+        <div class="graph-legend"><span><i class="legend-dot account"></i>Account</span><span><i class="legend-dot merchant"></i>Merchant</span><span><i class="legend-dot device"></i>Device / SIM</span><span><i class="legend-line payment"></i>Payment</span><span><i class="legend-line identity"></i>Identity link</span><span class="risk-legend"><i></i>higher risk</span></div>
+        <div class="graph-wrap" id="graph-wrap"><svg id="knowledge-graph" role="img" aria-label="Interactive TrustMesh account knowledge graph"></svg><div class="graph-empty" id="graph-empty" hidden>Search for an account or merchant to inspect its network.</div><div class="graph-stats" id="graph-stats">Loading graph…</div></div>
+        <div class="entity-strip" id="entity-strip"><span class="entity-placeholder">Select a node to inspect its activity and risk evidence.</span><span id="entity-actions"></span></div>
+        <div class="graph-foot"><span id="focus-caption">Select a node to inspect it</span><button class="text-button" id="network-home">Network overview <span>↗</span></button></div>
+      </article>
+
+      <aside class="panel screen-panel">
+        <div class="panel-head"><div class="panel-kicker">PRE-SETTLEMENT</div><h2>Screen a payment</h2><p>Run the TrustMesh agents on a transfer.</p></div>
+        <form id="screen-form">
+          <label class="field-label" for="sender">FROM <span>Sender account</span></label><div class="input-wrap"><span class="input-symbol">↗</span><input id="sender" list="accounts-list" placeholder="Search account or paste ID" required><datalist id="accounts-list"></datalist></div>
+          <label class="field-label" for="receiver">TO <span>Account or merchant</span></label><div class="input-wrap"><span class="input-symbol down">↙</span><input id="receiver" list="accounts-list" placeholder="Search account, merchant, VPA" required><datalist id="accounts-list"></datalist></div>
+          <label class="field-label" for="amount">AMOUNT <span>INR</span></label><div class="amount-wrap"><span>₹</span><input id="amount" type="number" min="1" step="1" placeholder="0.00" required></div>
+          <div class="signals-title">TRANSACTION SIGNALS <span>optional context</span></div>
+          <div class="signal-list"><label class="check-row"><input id="new-device" type="checkbox"><span class="checkmark"></span><span>New or unrecognised device</span><span class="signal-info" title="Device is not in the sender's known profile">i</span></label><label class="check-row"><input id="new-sim" type="checkbox"><span class="checkmark"></span><span>SIM changed recently</span><span class="signal-info" title="Recent SIM change is a takeover signal">i</span></label><label class="check-row"><input id="impossible-travel" type="checkbox"><span class="checkmark"></span><span>Impossible travel detected</span><span class="signal-info" title="1150 km in four minutes">i</span></label><label class="check-row"><input id="scripted-input" type="checkbox"><span class="checkmark"></span><span>Scripted interaction pattern</span><span class="signal-info" title="Robotic tap timing">i</span></label></div>
+          <button class="primary-button" id="screen-button" type="submit"><span>Screen transaction</span><span>→</span></button>
+          <p class="form-note"><span>◈</span> Decision is recorded before the payment can settle.</p>
+        </form>
+      </aside>
+    </section>
+
+    <section class="panel decision-panel">
+      <div class="tabs-head"><div class="tabs" role="tablist"><button class="tab active" data-tab="decisions">Recent decisions <span id="decision-tab-count">0</span></button><button class="tab" data-tab="reviews">Review queue <span id="review-tab-count">0</span></button><button class="tab" data-tab="registry">Fraud registry</button><button class="tab" data-tab="ledger">Block ledger</button><button class="tab" data-tab="audit">Audit trail</button></div><div class="table-actions"><span class="refresh-state"><i></i> AUTO-UPDATED</span><button id="refresh-data" class="icon-button" title="Refresh data">↻</button></div></div>
+      <div class="table-container" id="table-container"></div>
+    </section>
+    <footer><span>TrustMesh <b>·</b> pre-settlement UPI risk orchestration</span><span>LOCAL SYNTHETIC ENVIRONMENT <b>·</b> DRUNIX ADAPTER</span></footer>
+  </main>
+  <div class="toast" id="toast" role="status"></div>
+  <script src="/app.js" defer></script>
+</body></html>

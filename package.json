@@ -1,0 +1,13 @@
+{
+  "name": "trustmesh",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TrustMesh pre-settlement UPI fraud screening prototype",
+  "scripts": {
+    "start": "node server.js",
+    "start:dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
