@@ -74,7 +74,10 @@ function scoreGraph(tx, S, cfg, { WIN, sigmoid, logit, devCount, graphStore }) {
       const evidence = adjacent.length
         ? adjacent.reduce((sum, neighbor) => sum + Math.max(0, logit(previous(neighbor)) + 1), 0) / adjacent.length
         : 0;
-      const result = sigmoid(logit(previous(id)) + 0.9 * evidence);
+      // Keep one or two unrelated risky neighbors as supporting evidence. A
+      // strong global propagation weight made any entity near a synthetic
+      // high-risk hub look fraudulent, even without a direct pattern match.
+      const result = sigmoid(logit(previous(id)) + 0.12 * evidence);
       memo.set(id, result); return result;
     };
   };
