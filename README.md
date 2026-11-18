@@ -71,3 +71,9 @@ Decision records, registry changes, and approved local block records append to i
 ## Integration boundary
 
 This is a local prototype. The network, payments, and account identities are synthetic. The DRUNIX sandbox status labels the intended integration environment; this app does not claim to connect to live bank rails, a live DRUNIX peer network, KeyDB, YugabyteDB, gRPC, ONNX, or Kubernetes. The adapters and Go contracts are integration starting points; deployment credentials and network configuration are still required for live use.
+
+### Run the on-chain DRUNIX smoke workflow
+
+The [Yaashu2003/drunix fork](https://github.com/Yaashu2003/drunix) includes a manual GitHub Actions workflow: [TrustMesh on DRUNIX test network](https://github.com/Yaashu2003/drunix/actions/workflows/trustmesh-testnet-smoke.yml). Open the **Actions** tab, select that workflow, and choose **Run workflow**. It uses a standard public Ubuntu runner, builds the DRUNIX tools, starts the two-organization test network, deploys this repository's TrustMesh chaincode, screens three synthetic payments through the Node API, submits the actual decisions to the test peer, and queries the payment and audit records back from ledger state.
+
+The runner is temporary and tears down the network after the run. These are real ledger writes in an isolated DRUNIX test network, not real UPI transfers. Standard GitHub-hosted runners are free for public repositories; the workflow doesn't use Docker Desktop subscriptions or paid services. See [GitHub Actions billing](https://docs.github.com/en/actions/concepts/billing-and-usage).
