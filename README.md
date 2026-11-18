@@ -2,6 +2,8 @@
 
 TrustMesh is a working local prototype for pre-settlement UPI fraud screening. It combines a synthetic four-bank payment network, three risk agents, an orchestration policy, an interactive entity knowledge graph, analyst review, a fraud registry, and a hash-linked local audit/block journal.
 
+For the component map, graph model, decision flow, local run instructions and sample request walkthrough, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## Run
 
 Requires Node.js 20 or newer. The prototype uses only Node's built-in modules.
