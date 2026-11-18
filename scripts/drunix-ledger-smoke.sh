@@ -10,7 +10,10 @@ cd "$NETWORK_DIR"
 DRUNIX_ROOT="$(cd ../.. && pwd)"
 export PATH="$DRUNIX_ROOT/build/bin:$PATH"
 export FABRIC_CFG_PATH="$(pwd)/../config"
+# DRUNIX's helper reads optional shell variables under nounset mode.
+set +u
 source scripts/envVar.sh
+set -u
 
 invoke_and_verify() {
   local label="$1" expected="$2" from="$3" to="$4" amount="$5" signals="$6"
