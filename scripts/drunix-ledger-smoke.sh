@@ -12,6 +12,7 @@ export PATH="$DRUNIX_ROOT/build/bin:$PATH"
 export FABRIC_CFG_PATH="$(pwd)/../config"
 # DRUNIX's helper reads optional shell variables under nounset mode.
 set +u
+export OVERRIDE_ORG="${OVERRIDE_ORG:-}"
 source scripts/envVar.sh
 set -u
 
