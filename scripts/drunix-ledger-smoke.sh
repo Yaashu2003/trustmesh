@@ -56,7 +56,7 @@ invoke_and_verify() {
   echo "Submitting $label ($txid) to DRUNIX as $verdict"
   setGlobals 1 0
   peer chaincode invoke -o localhost:7050 -C "$CHANNEL" -n "$CHAINCODE" -c "$invoke_json" \
-    --tls --cafile "$ORDERER_CA" \
+    --tls --cafile "$ORDERER_CA" --waitForEvent --waitForEventTimeout 30s \
     --peerAddresses localhost:7051 --tlsRootCertFiles "$PEER0_ORG1_CA" \
     --peerAddresses localhost:9051 --tlsRootCertFiles "$PEER0_ORG2_CA"
 
