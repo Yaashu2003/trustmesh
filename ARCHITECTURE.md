@@ -65,6 +65,18 @@ The API equivalents are:
 
 For a reviewable network-ledger example, start the manual workflow [here](https://github.com/Yaashu2003/drunix/actions/workflows/trustmesh-testnet-smoke.yml). It submits the same three cases and prints transaction IDs and ledger verification in the run summary. Its public standard runner is temporary; the test ledger is removed when the workflow tears down the network.
 
+### Verified DRUNIX run
+
+On 2026-11-19, workflow run [44453878225](https://github.com/Yaashu2003/drunix/actions/runs/44453878225) completed successfully. Each transaction was submitted to the two-organization DRUNIX test network and then read back from both `TransactionGate` and `AuditTrail`:
+
+| Example | Ledger transaction ID | Decision | Result |
+|---|---|---|---|
+| Familiar purchase | `screen_faf345b4-027` | `APPROVE` | Verified in payment state and audit history |
+| New device and SIM | `screen_97211460-d0e` | `HOLD` | Verified in payment state and audit history |
+| Mule-ring transfer | `screen_20fa4dd6-6cc` | `BLOCK` | Verified in payment state and audit history |
+
+These IDs are from that ephemeral run; later workflow runs generate new IDs and a fresh ledger.
+
 ## API map
 
 - `GET /api/health`, `/api/overview`
