@@ -54,16 +54,16 @@ invoke_and_verify() {
   invoke_json="$(jq -cn --arg payload "$attestation" '{Args:["TransactionGate:Evaluate",$payload]}')"
 
   echo "Submitting $label ($txid) to DRUNIX as $verdict"
-  setGlobals 1 1
+  setGlobals 1 0
   peer chaincode invoke -o localhost:7050 -C "$CHANNEL" -n "$CHAINCODE" -c "$invoke_json" \
     --tls --cafile "$ORDERER_CA" \
     --peerAddresses localhost:7051 --tlsRootCertFiles "$PEER0_ORG1_CA" \
     --peerAddresses localhost:9051 --tlsRootCertFiles "$PEER0_ORG2_CA"
 
   query_json="$(jq -cn --arg id "$txid" '{Args:["TransactionGate:ReadDecision",$id]}')"
-  # Read from the same submitting peer first so the smoke check does not race
-  # a remote peer's block delivery after successful endorsement/commit.
-  setGlobals 1 1
+  # Use the installed Org1 peer for invoke and query; DRUNIX's second Org1
+  # peer is not part of this reduced two-peer endorsement set.
+  setGlobals 1 0
   decision="$(peer chaincode query -C "$CHANNEL" -n "$CHAINCODE" -c "$query_json")"
   jq -e --arg id "$txid" --arg expected "$expected" \
     '.transactionId == $id and .verdict == $expected' <<< "$decision" >/dev/null
