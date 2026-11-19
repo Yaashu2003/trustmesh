@@ -61,7 +61,9 @@ invoke_and_verify() {
     --peerAddresses localhost:9051 --tlsRootCertFiles "$PEER0_ORG2_CA"
 
   query_json="$(jq -cn --arg id "$txid" '{Args:["TransactionGate:ReadDecision",$id]}')"
-  setGlobals 1 0
+  # Read from the same submitting peer first so the smoke check does not race
+  # a remote peer's block delivery after successful endorsement/commit.
+  setGlobals 1 1
   decision="$(peer chaincode query -C "$CHANNEL" -n "$CHAINCODE" -c "$query_json")"
   jq -e --arg id "$txid" --arg expected "$expected" \
     '.transactionId == $id and .verdict == $expected' <<< "$decision" >/dev/null
