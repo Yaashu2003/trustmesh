@@ -14,7 +14,9 @@ export FABRIC_CFG_PATH="$(pwd)/../config"
 set +u
 export OVERRIDE_ORG="${OVERRIDE_ORG:-}"
 source scripts/envVar.sh
-set -u
+# DRUNIX's setGlobals and peer helpers also use optional variables such as
+# VERBOSE; keep nounset disabled while invoking them.
+set -eo pipefail
 
 invoke_and_verify() {
   local label="$1" expected="$2" from="$3" to="$4" amount="$5" signals="$6"
