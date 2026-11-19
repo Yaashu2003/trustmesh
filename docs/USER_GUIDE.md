@@ -1,6 +1,6 @@
 # TrustMesh: prototype guide
 
-This guide shows where to click, what to enter, and how to read the knowledge graph and decisions. TrustMesh is a local prototype using synthetic data; it does not connect to live UPI accounts or move money.
+This guide shows where to click, what to enter, and how to read the knowledge graph and decisions. TrustMesh is a local prototype using synthetic data; it does not connect to live UPI accounts or move money. For full screenshots of the live page across all three runs, see [Example runs](EXAMPLE_RUNS.md).
 
 ## Start the app
 
@@ -42,7 +42,7 @@ The examples use deterministic seeded entities. In the payment form, enter the v
 
 ### 1. Familiar merchant purchase — APPROVE
 
-![Illustrative graph for familiar merchant purchase](images/scenario-approve.svg)
+![Website screenshot showing the live graph and payment form filled for the familiar merchant purchase, with its APPROVE result](images/example-run-1-approve.png)
 
 | Form field | Value |
 |---|---|
@@ -55,7 +55,7 @@ Expected: **APPROVE**. The payment appears under **Recent decisions**. Try searc
 
 ### 2. New device and SIM — HOLD for review
 
-![Illustrative graph for new device and SIM review](images/scenario-hold.svg)
+![Website screenshot showing new-device and SIM signals checked, the live account graph, and the HOLD result](images/example-run-2-hold.png)
 
 | Form field | Value |
 |---|---|
@@ -68,7 +68,7 @@ Expected: **HOLD**. Click the **Review queue** tab. Select the held row and use 
 
 ### 3. Mule-ring transfer — BLOCK
 
-![Illustrative graph for mule ring transfer](images/scenario-block.svg)
+![Website screenshot showing the live mule-ring graph, all four risk signals checked, and the BLOCK result](images/example-run-3-mule-block.png)
 
 | Form field | Value |
 |---|---|

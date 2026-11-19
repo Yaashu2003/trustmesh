@@ -2,6 +2,33 @@
 
 TrustMesh is a synthetic UPI pre-settlement fraud-screening prototype. It is not connected to live bank rails. The app runs as a Node.js process; its DRUNIX chaincode was also deployed and exercised against a local two-organization Docker test network and the public GitHub Actions test network.
 
+## Technical architecture and request pipeline
+
+![TrustMesh technical architecture diagram showing the browser workbench, Node API, synthetic network store, graph/search endpoints, three parallel risk agents, policy orchestrator, local decision and review records, and a separate optional DRUNIX ledger workflow](docs/images/trustmesh-technical-architecture.svg)
+
+The diagram separates the **normal local request path** from the **optional ledger workflow**. A browser request reaches the Node API; the API enriches it with synthetic account and relationship context, runs all three scoring agents, and sends their output to the deterministic orchestrator. The API returns a decision and evidence to the browser, records the local outcome, and refreshes the graph and decision tabs. The lower dashed path is a separate GitHub Actions/DRUNIX smoke workflow; normal browser screening does not call a DRUNIX peer.
+
+At startup, `server/data-store.cjs` generates synthetic accounts, merchants, devices, SIM identities and payment history, then prepares indexes used by neighborhood graph queries, search and account profiles. `GET /api/graph` returns the focused nodes, payment edges and identity links for the UI. The graph agent evaluates network patterns from the same underlying synthetic data. A graph is therefore available as soon as the UI/API finish loading; screening a transaction adds a new relationship and recent risk evidence.
+
+### Pipeline stages
+
+| Stage | Request or module | Work performed | Output |
+|---|---|---|---|
+| UI | `public/app.js` | Sends sender, payee, amount and selected signals; requests graph/search data | Form request and graph view |
+| API boundary | `POST /api/transactions/analyze` in `server.js` | Validates the body and resolves the sender/payee against seeded entities | Normalized synthetic transaction |
+| Feature context | `server/data-store.cjs` | Loads account profile, recent payment history, device/SIM and neighborhood edges | Agent feature context |
+| Parallel risk analysis | `server/agents/transaction-pattern.cjs`, `behavioral-biometric.cjs`, `graph-network.cjs` | Scores transaction behavior, identity signals and network structure independently | Three scores with reason lists |
+| Policy | `server/agents/orchestrator.cjs` | Applies the maximum-score veto and blended-risk thresholds | `APPROVE`, `HOLD` or `BLOCK` |
+| Local response | `server.js`, `data/` | Updates recent decisions, held queue or block journal and audit/registry records | JSON response, updated tabs and graph |
+| Optional ledger | `.github/workflows/` + `chaincode/trustmesh/` | Runs an isolated DRUNIX network and submits its three smoke-case decisions | On-chain transaction gate and audit entries |
+
+### System boundaries
+
+- The graph UI is an interactive ego-network view around a selected account or merchant, not a fixed overview visualization of every seeded edge at once. Change graph depth to expand its local neighborhood.
+- Local storage adapters are development implementations. The prototype does not start a KeyDB or YugabyteDB server, gRPC inference service, ONNX model host or Kubernetes cluster.
+- The app does not access bank UPI rails. Synthetic identities and payments are for demonstration; approvals in this prototype are not real settlements.
+- For screenshot-based walkthroughs of an APPROVE, HOLD and BLOCK case, see the [example runs](docs/EXAMPLE_RUNS.md) and the visual captures embedded in the [README](README.md#example-runs).
+
 ## Components
 
 | Layer | What is present | What it does |

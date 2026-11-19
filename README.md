@@ -2,7 +2,7 @@
 
 TrustMesh is a working local prototype for pre-settlement UPI fraud screening. It combines a synthetic four-bank payment network, three risk agents, an orchestration policy, an interactive entity knowledge graph, analyst review, a fraud registry, and a hash-linked local audit/block journal.
 
-This README includes the architecture, graph explanation, click-by-click instructions, and three illustrated scenarios. See [ARCHITECTURE.md](ARCHITECTURE.md) for deeper component and API details.
+This README contains real screenshots from three runs of the working website. For the full walkthrough, see [Example runs](docs/EXAMPLE_RUNS.md); for the technical pipeline diagram and component design, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Run
 
@@ -22,69 +22,19 @@ Open [http://127.0.0.1:4173](http://127.0.0.1:4173). By default the server gener
 - Review held payments. Analyst approval commits them; rejection adds the payee to the fraud registry.
 - Inspect recent decisions, review queue, registry, and the tamper-evident audit trail.
 
-## Architecture and request flow
+## Try these sample payments
 
-![TrustMesh architecture: the workbench calls the API, agents score requests, policy routes a decision, and the optional DRUNIX test ledger records submitted results](docs/images/trustmesh-system-flow.svg)
+Enter the IDs and amount in the workbench. Optional signal checkboxes are off unless noted. These examples use seeded synthetic entities; expected outcomes below were checked against the local agent pipeline.
 
-1. **Analyst UI** — The browser serves the payment form, decisions and interactive knowledge graph from `public/`.
-2. **Node API** — `server.js` validates the request, looks up the synthetic account profile and coordinates the response. The form submits to `POST /api/transactions/analyze`.
-3. **Three risk agents** — Transaction-pattern scoring checks amount, velocity and time; behavioral scoring checks device, SIM, travel and scripted interaction; graph-network scoring examines payment cycles, fan-in, pass-through behavior and shared identities.
-4. **Orchestrator policy** — A maximum agent score above `0.85` blocks the payment. Otherwise a blended risk above `0.60` is held. Lower risk is approved. The response includes the decision and supporting signals.
-5. **Workbench and local records** — The UI shows the decision, refreshes the graph around the sender, and updates recent decisions, reviews, registry, block ledger and audit trail. Local app records persist under ignored `data/` files.
-6. **Optional ledger workflow** — Go chaincode can be deployed to the isolated DRUNIX test network by the workflow described below. That workflow submits and verifies ledger entries; ordinary local UI requests do not automatically write to a live peer.
+| Scenario | Sender | Payee | Amount | Signals | Expected result |
+|---|---|---|---:|---|---|
+| Familiar purchase | `acc_000001` | `mer_001` | ₹750 | None | **APPROVE** (low risk) |
+| New device and SIM | `acc_000001` | `mer_001` | ₹1,500 | Enable **New or unrecognised device** and **SIM changed recently** | **HOLD** for analyst review |
+| Mule ring transfer | `mule_01_a` | `mule_01_b` | ₹9,850 | Enable all four signals | **BLOCK** before settlement |
 
-The local synthetic graph and screening engine require only Node.js. Docker/Go are for the optional DRUNIX ledger workflow. This is a prototype, not a live UPI connection or a payment processor.
+For the HOLD example, open **Review queue** to approve or reject the payment. For the mule-ring case, the graph starts on `mule_01_a`; click **Network overview** to return there after navigating elsewhere.
 
-## Knowledge graph: what it shows and how to open it
-
-The graph is already on the main page; there is no separate build button. It is a relationship map, not a conventional chart: circles are accounts, merchants, devices or SIM identities; directed arrows are payments; dashed identity links represent a shared device/SIM association. Select a node to inspect it and its activity. Risk coloring helps draw attention to higher-risk neighborhoods. The exact graph shown is an interactive subset around the selected entity, not the entire 300,000-edge network at once.
-
-![Illustrative TrustMesh knowledge graph: account, merchant, payment direction and known identity links](docs/images/scenario-approve.svg)
-
-1. Run `npm start`, open `http://127.0.0.1:4173`, and wait for **API connected** and the network counters.
-2. In **Find account, VPA, merchant…**, search for `acc_000001` or `mule_01_a`; choose its suggestion to focus the map.
-3. Choose **1 hop**, **2 hops** or **3 hops** to control how far relationships extend. Two hops is a useful starting view.
-4. Click a graph node to inspect its entity details. Use **Network overview** to return to the overview. After you screen a transfer, the graph automatically refreshes around the sender.
-
-If the graph is blank, confirm **API connected**, refresh the page, and search one of the seeded IDs above. The graph data comes from `GET /api/graph`; search suggestions come from `GET /api/search`.
-
-## Three runnable scenarios
-
-These scenarios use seeded synthetic identities. In the **Screen a payment** panel fill **FROM**, **TO**, and **AMOUNT**, set the stated checkboxes, then click **Screen transaction**. Expected results are the seeded examples verified against the local screening pipeline. The diagrams explain the relationship pattern; they are illustrative views, while the live graph can differ with hop depth and focus.
-
-### Scenario 1 — Familiar merchant payment (APPROVE)
-
-![Scenario 1 illustration: a familiar account pays a merchant with known device and SIM relationships](docs/images/scenario-approve.svg)
-
-**Enter:** FROM `acc_000001`; TO `mer_001`; AMOUNT `750`; leave every signal unchecked.
-
-**Expected:** `APPROVE`. The transaction is low risk for this seeded profile. It appears under **Recent decisions**. Search `acc_000001` in the graph to see its neighborhood and click the merchant or account node to inspect it.
-
-**What the picture means:** the solid arrow indicates the account-to-merchant payment direction. The two small nodes are known device/SIM identities linked to the relationship context. Green indicates the low-risk example.
-
-### Scenario 2 — Account takeover indicators (HOLD)
-
-![Scenario 2 illustration: a familiar account pays from a new device and recently changed SIM, so the payment is held for review](docs/images/scenario-hold.svg)
-
-**Enter:** FROM `acc_000001`; TO `mer_001`; AMOUNT `1500`; check **New or unrecognised device** and **SIM changed recently**; leave impossible travel and scripted interaction unchecked.
-
-**Expected:** `HOLD`. The identity changes raise the risk enough for analyst review. Click **Review queue**, then approve or reject the held row. Approval records the analyst outcome; rejection adds the payee to the local **Fraud registry**. Review and registry activity can be inspected in **Audit trail**.
-
-**What the picture means:** the payment path is amber, and the device and SIM nodes are marked as new. It represents identity-risk context attached to an otherwise familiar account-to-merchant payment.
-
-### Scenario 3 — Mule-ring transfer (BLOCK)
-
-![Scenario 3 illustration: three mule accounts form a circular transfer pattern and share device/SIM identities](docs/images/scenario-block.svg)
-
-**Enter:** FROM `mule_01_a`; TO `mule_01_b`; AMOUNT `9850`; check all four signals: **New or unrecognised device**, **SIM changed recently**, **Impossible travel detected**, and **Scripted interaction pattern**.
-
-**Expected:** `BLOCK`. The direct behavioral signals combine with the seeded mule-ring context. Find `mule_01_a` in the graph and use **2 hops** or **3 hops** to inspect the ring. The blocked transaction appears under **Recent decisions** and **Block ledger**.
-
-**What the picture means:** red account nodes and directed edges show a circular flow across the mule accounts. Dashed links connect shared device/SIM evidence. These relationship patterns are graph-agent evidence; the four checked signals add behavioral evidence.
-
-### Same scenarios through the API
-
-The examples can also be submitted to `POST /api/transactions/analyze`:
+The same screening API accepts these JSON bodies at `POST /api/transactions/analyze`:
 
 ```json
 {"from":"acc_000001","to":"mer_001","amount":750}
@@ -98,7 +48,29 @@ The examples can also be submitted to `POST /api/transactions/analyze`:
 {"from":"mule_01_a","to":"mule_01_b","amount":9850,"newDevice":true,"newSim":true,"impossibleTravel":true,"scriptedInput":true}
 ```
 
-Other workbench tabs: **Recent decisions** shows outcomes and score explanations; **Review queue** contains held items; **Fraud registry** lists registered payees; **Block ledger** lists blocked decisions; **Audit trail** records screening and analyst activity. Use ↻ to refresh.
+## Example runs
+
+The images below are **screenshots of the running TrustMesh website**, not conceptual drawings. Each shows the live knowledge graph, the payment form with its example input, and the resulting decision row. The captures were made against a fresh 10,000-payment synthetic network; accounts and transfers are simulated.
+
+### Scenario 1 — Familiar merchant payment · APPROVE
+
+![Website screenshot: the TrustMesh graph focused on acc_000001 beside the payment form for acc_000001 to mer_001, ₹750, with all risk signals off; the latest decision is APPROVE](docs/images/example-run-1-approve.png)
+
+**Input:** `acc_000001` → `mer_001`, ₹750, no risk signals. The graph shows the seeded account and merchant neighborhood. The newest row is **APPROVE** at 8% risk because this is the low-risk baseline in the synthetic profile.
+
+### Scenario 2 — New device and SIM · HOLD
+
+![Website screenshot: the TrustMesh graph beside the acc_000001 to mer_001 payment form for ₹1,500 with new-device and SIM-change signals enabled; the latest decision is HOLD](docs/images/example-run-2-hold.png)
+
+**Input:** `acc_000001` → `mer_001`, ₹1,500; enable **New or unrecognised device** and **SIM changed recently**. The newest row is **HOLD** at 61% risk and the Review queue counter increases. Click **Review queue** to inspect and resolve it as an analyst. Rejection adds the payee to the local fraud registry.
+
+### Scenario 3 — Mule-ring transfer · BLOCK
+
+![Website screenshot: the TrustMesh knowledge graph shows a red three-account mule ring beside a mule_01_a to mule_01_b payment form for ₹9,850 with all four signals checked; the latest decision is BLOCK](docs/images/example-run-3-mule-block.png)
+
+**Input:** `mule_01_a` → `mule_01_b`, ₹9,850; enable all four signals. The graph focuses on the seeded mule ring and shows its red payment paths and identity neighbors. The newest row is **BLOCK** at 100% risk, with **Stopped before settlement** status.
+
+See [Example runs](docs/EXAMPLE_RUNS.md) for the complete click-by-click explanation and graph-reading guide. The technical architecture diagram is in [ARCHITECTURE.md](ARCHITECTURE.md#technical-architecture-and-request-pipeline).
 
 ## Backend
 
