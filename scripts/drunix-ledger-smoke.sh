@@ -56,7 +56,7 @@ invoke_and_verify() {
   echo "Submitting $label ($txid) to DRUNIX as $verdict"
   setGlobals 1 0
   peer chaincode invoke -o localhost:7050 -C "$CHANNEL" -n "$CHAINCODE" -c "$invoke_json" \
-    --tls --cafile "$ORDERER_CA" --waitForEvent --waitForEventTimeout 30s \
+    --tls --cafile "$ORDERER_CA" \
     --peerAddresses localhost:7051 --tlsRootCertFiles "$PEER0_ORG1_CA" \
     --peerAddresses localhost:9051 --tlsRootCertFiles "$PEER0_ORG2_CA"
 
@@ -64,12 +64,30 @@ invoke_and_verify() {
   # Use the installed Org1 peer for invoke and query; DRUNIX's second Org1
   # peer is not part of this reduced two-peer endorsement set.
   setGlobals 1 0
-  decision="$(peer chaincode query -C "$CHANNEL" -n "$CHAINCODE" -c "$query_json")"
+  decision=''
+  for attempt in $(seq 1 20); do
+    decision="$(peer chaincode query -C "$CHANNEL" -n "$CHAINCODE" -c "$query_json" 2>/dev/null || true)"
+    [[ -n "$decision" ]] && break
+    sleep 1
+  done
+  if [[ -z "$decision" ]]; then
+    echo "Decision $txid was not readable from the DRUNIX peer after 20 seconds" >&2
+    return 1
+  fi
   jq -e --arg id "$txid" --arg expected "$expected" \
     '.transactionId == $id and .verdict == $expected' <<< "$decision" >/dev/null
 
   audit_json="$(jq -cn --arg id "$txid" '{Args:["AuditTrail:Read",$id]}')"
-  audit="$(peer chaincode query -C "$CHANNEL" -n "$CHAINCODE" -c "$audit_json")"
+  audit=''
+  for attempt in $(seq 1 20); do
+    audit="$(peer chaincode query -C "$CHANNEL" -n "$CHAINCODE" -c "$audit_json" 2>/dev/null || true)"
+    [[ -n "$audit" ]] && break
+    sleep 1
+  done
+  if [[ -z "$audit" ]]; then
+    echo "Audit record $txid was not readable from the DRUNIX peer after 20 seconds" >&2
+    return 1
+  fi
   jq -e --arg id "$txid" --arg expected "$expected" \
     '.transactionId == $id and .verdict == $expected and .actorOrg == "Org1MSP"' <<< "$audit" >/dev/null
 
