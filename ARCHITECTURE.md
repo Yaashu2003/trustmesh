@@ -1,6 +1,6 @@
 # TrustMesh prototype: what runs and how the pieces connect
 
-TrustMesh is a synthetic UPI pre-settlement fraud-screening prototype. It is not connected to live bank rails. The normal local app runs as one Node.js process; a separate, temporary DRUNIX test network is available in the public GitHub Actions workflow.
+TrustMesh is a synthetic UPI pre-settlement fraud-screening prototype. It is not connected to live bank rails. The app runs as a Node.js process; its DRUNIX chaincode was also deployed and exercised against a local two-organization Docker test network and the public GitHub Actions test network.
 
 ## Components
 
@@ -31,13 +31,13 @@ The graph is an entity relationship view, not a standard chart. Nodes represent 
 
 ## Run locally
 
-Requirements: Node.js 20 or newer. No Docker is required for the local UI and synthetic screening prototype.
+Requirements: Node.js 20 or newer. No Docker is required for the local UI and synthetic screening prototype. Docker and Go 1.26.1 are required for the optional DRUNIX ledger network.
 
 ```powershell
 npm start
 ```
 
-Open `http://127.0.0.1:4173`. To choose a smaller dataset, set `TRUSTMESH_TRANSACTIONS` before starting (for example `5000`); `PORT` changes the port. The in-memory graph is rebuilt at startup. Decision/audit files under `data/` persist between starts.
+Open `http://127.0.0.1:4173`. To choose a smaller dataset, set `TRUSTMESH_TRANSACTIONS` before starting (for example `5000`); `PORT` changes the port and `HOST` controls the bind address (defaults to `127.0.0.1`). The in-memory graph is rebuilt at startup. Decision/audit files under `data/` persist between starts.
 
 ## Example inputs
 
@@ -63,7 +63,9 @@ The API equivalents are:
 {"from":"mule_01_a","to":"mule_01_b","amount":9850,"newDevice":true,"newSim":true,"impossibleTravel":true,"scriptedInput":true}
 ```
 
-For a reviewable network-ledger example, start the manual workflow [here](https://github.com/Yaashu2003/drunix/actions/workflows/trustmesh-testnet-smoke.yml). It submits the same three cases and prints transaction IDs and ledger verification in the run summary. Its public standard runner is temporary; the test ledger is removed when the workflow tears down the network.
+For a reviewable network-ledger example, start the manual workflow [here](https://github.com/Yaashu2003/drunix/actions/workflows/trustmesh-testnet-smoke.yml). It submits the same three cases and prints transaction IDs and ledger verification in the run summary. The public runner is temporary; its test ledger is removed when the workflow tears down the network.
+
+The local DRUNIX network uses the fork in `drunix-platform/`, Docker Compose services for two organizations (peers/orderer, YugabyteDB and KeyDB), and the Go contracts in `chaincode/trustmesh/`. It was started locally through Docker Desktop and Ubuntu 24.04 WSL. Because Docker Desktop exposes its WSL engine through a proxy socket on this machine, the local Compose setup uses Docker Desktop's `/run/desktop/mnt/host` mount paths. That is a machine-specific setup; the public workflow provides the portable, reproducible network setup.
 
 ### Verified DRUNIX run
 
@@ -76,6 +78,18 @@ On 2026-11-19, workflow run [44453878225](https://github.com/Yaashu2003/drunix/a
 | Mule-ring transfer | `screen_20fa4dd6-6cc` | `BLOCK` | Verified in payment state and audit history |
 
 These IDs are from that ephemeral run; later workflow runs generate new IDs and a fresh ledger.
+
+### Verified local Docker run
+
+On 2026-11-19, the local Docker network started, deployed TrustMesh, and accepted the same three API-screened scenarios. Each result was queried back from `TransactionGate` and `AuditTrail`:
+
+| Example | Local ledger transaction ID | Decision | Result |
+|---|---|---|---|
+| Familiar purchase | `screen_6442e5d0-eba` | `APPROVE` | Verified in payment state and audit history |
+| New device and SIM | `screen_0eace015-3df` | `HOLD` | Verified in payment state and audit history |
+| Mule-ring transfer | `screen_9b4732e6-57f` | `BLOCK` | Verified in payment state and audit history |
+
+The local network is a developer sandbox. These writes do not touch real payment rails; restarting it with cleared volumes creates a fresh ledger.
 
 ## API map
 

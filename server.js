@@ -126,4 +126,5 @@ const app = http.createServer(async (req, res) => {
     return sendStatic(res, p);
   } catch (error) { return json(res, 400, { error: error.message || 'Request failed' }); }
 });
-app.listen(PORT, '127.0.0.1', () => console.log(`TrustMesh workbench listening at http://127.0.0.1:${PORT} (${store.transactions.length.toLocaleString()} synthetic transactions)`));
+const HOST = process.env.HOST || '127.0.0.1';
+app.listen(PORT, HOST, () => console.log(`TrustMesh workbench listening at http://${HOST}:${PORT} (${store.transactions.length.toLocaleString()} synthetic transactions)`));
