@@ -60,6 +60,11 @@ func (c *TransactionGate) Evaluate(ctx contractapi.TransactionContextInterface, 
 	if prior != nil {
 		return nil, fmt.Errorf("transaction %s has already been evaluated", a.TransactionID)
 	}
+	if a.Verdict == "BLOCK" && a.Reason != "Shared FraudRegistry pre-check" {
+		if err := (&FraudRegistry{}).Register(ctx, a.ReceiverHash, a.Reason); err != nil {
+			return nil, fmt.Errorf("register blocked receiver: %w", err)
+		}
+	}
 	encoded, err := json.Marshal(a)
 	if err != nil {
 		return nil, err
@@ -85,6 +90,63 @@ func (c *TransactionGate) Evaluate(ctx contractapi.TransactionContextInterface, 
 		return nil, fmt.Errorf("write AuditTrail decision: %w", err)
 	}
 	return &a, nil
+}
+
+// ResolveHold records an analyst's final decision for a previously held payment.
+// A rejection also adds the payee's pseudonymous hash to the shared fraud registry.
+func (c *TransactionGate) ResolveHold(ctx contractapi.TransactionContextInterface, transactionID, verdict, reason string) (*RiskAttestation, error) {
+	if transactionID == "" || reason == "" {
+		return nil, fmt.Errorf("transaction id and review reason are required")
+	}
+	if verdict != "APPROVE" && verdict != "BLOCK" {
+		return nil, fmt.Errorf("review verdict must be APPROVE or BLOCK")
+	}
+	raw, err := ctx.GetStub().GetState("payment:" + transactionID)
+	if err != nil {
+		return nil, err
+	}
+	if raw == nil {
+		return nil, fmt.Errorf("decision %s does not exist", transactionID)
+	}
+	var attestation RiskAttestation
+	if err := json.Unmarshal(raw, &attestation); err != nil {
+		return nil, err
+	}
+	if attestation.Verdict != "HOLD" {
+		return nil, fmt.Errorf("decision %s is %s, not HOLD", transactionID, attestation.Verdict)
+	}
+	attestation.Verdict = verdict
+	attestation.Reason = reason
+	encoded, err := json.Marshal(attestation)
+	if err != nil {
+		return nil, err
+	}
+	if verdict == "BLOCK" {
+		if err := (&FraudRegistry{}).Register(ctx, attestation.ReceiverHash, reason); err != nil {
+			return nil, fmt.Errorf("register rejected payee: %w", err)
+		}
+	}
+	if err := ctx.GetStub().PutState("payment:"+transactionID, encoded); err != nil {
+		return nil, fmt.Errorf("update payment decision: %w", err)
+	}
+	txTime, err := ctx.GetStub().GetTxTimestamp()
+	if err != nil {
+		return nil, err
+	}
+	actorOrg, err := ctx.GetClientIdentity().GetMSPID()
+	if err != nil {
+		return nil, err
+	}
+	record := AuditRecord{ID: transactionID + ":review", TransactionID: transactionID, Verdict: verdict, Attestation: attestation,
+		ActorOrg: actorOrg, CreatedAt: txTime.AsTime().UTC().Format("2006-01-02T15:04:05.999999999Z07:00")}
+	auditJSON, err := json.Marshal(record)
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.GetStub().PutState("audit:"+record.ID, auditJSON); err != nil {
+		return nil, fmt.Errorf("write review AuditTrail record: %w", err)
+	}
+	return &attestation, nil
 }
 
 func (c *TransactionGate) ReadDecision(ctx contractapi.TransactionContextInterface, transactionID string) (*RiskAttestation, error) {

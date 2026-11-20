@@ -1,6 +1,7 @@
 node_modules/
 data/*.jsonl
 chaincode/trustmesh/trustmesh-chaincode.exe
+chaincode/trustmesh/vendor/
 *.log
 drunix-platform/
 tmp/

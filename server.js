@@ -8,13 +8,14 @@ const { scoreBehavior } = require('./server/agents/behavioral-biometric.cjs');
 const { scoreGraph } = require('./server/agents/graph-network.cjs');
 const { orchestrate } = require('./server/agents/orchestrator.cjs');
 const { KeyDBStore } = require('./server/storage/keydb.cjs');
+const { DrunixClient } = require('./server/ledger/drunix-client.cjs');
 
 const ROOT = __dirname, PORT = Number(process.env.PORT || 4173);
 const TARGET = Math.max(1000, Math.min(500000, Number(process.env.TRUSTMESH_TRANSACTIONS || 300000)));
 const DATA = path.join(ROOT, 'data');
 fs.mkdirSync(DATA, { recursive: true });
-const store = new TrustMeshStore(TARGET), profileCache = new KeyDBStore();
-const auditPath = path.join(DATA, 'audit.jsonl'), registryPath = path.join(DATA, 'registry.jsonl'), blockPath = path.join(DATA, 'blocks.jsonl');
+const store = new TrustMeshStore(TARGET), profileCache = new KeyDBStore(), drunix = new DrunixClient();
+const auditPath = path.join(DATA, 'audit.jsonl'), registryPath = path.join(DATA, 'registry.jsonl'), blockPath = path.join(DATA, 'blocks.jsonl'), ledgerPath = path.join(DATA, 'ledger.jsonl');
 let counters = { screened: 0, approved: 0, held: 0, blocked: 0, stoppedAmount: 0 };
 let previousHash = '0'.repeat(64), sequence = 0;
 const recentDecisions = [], reviewQueue = [];
@@ -30,9 +31,9 @@ function json(res, status, value) { res.writeHead(status, { 'content-type': 'app
 async function readBody(req) { let raw = ''; for await (const c of req) { raw += c; if (raw.length > 1_000_000) throw new Error('Request too large'); } try { return raw ? JSON.parse(raw) : {}; } catch { throw new Error('Body must be valid JSON'); } }
 function persist(file, value) { fs.appendFileSync(file, JSON.stringify(value) + '\n'); }
 function addAudit(entry) { const base = { sequence: ++sequence, at: new Date().toISOString(), ...entry, previousHash }; const hash = createHash('sha256').update(JSON.stringify(base)).digest('hex'); const record = { ...base, hash }; previousHash = hash; persist(auditPath, record); return record; }
-function snapshotDecision(d) { return { id: d.id, at: d.at, from: d.from, to: d.to, fromLabel: d.fromLabel, toLabel: d.toLabel, amount: d.amount, verdict: d.verdict, score: d.score, reason: d.reason, status: d.status }; }
+function snapshotDecision(d) { return { id: d.id, at: d.at, from: d.from, to: d.to, fromLabel: d.fromLabel, toLabel: d.toLabel, amount: d.amount, verdict: d.verdict, score: d.score, reason: d.reason, status: d.status, ledger: d.ledger || null }; }
 function viewNode(n) { return { id: n.id, type: n.type, bank: n.bank, label: n.label, vpa: n.vpa, risk: n.risk, age: n.age, average: n.avg, archetype: n.archetype || null, flagged: !!n.bl, shared: !!n.shared }; }
-function overview() { return { ...store.networkSummary(), counters, reviewCount: reviewQueue.length, agents, environment: 'Synthetic development network', persistence: 'Local append-only JSONL audit, registry, and block records', generatedAt: iso(store.now) }; }
+function overview() { return { ...store.networkSummary(), counters, reviewCount: reviewQueue.length, agents, ledger: drunix.publicStatus(), environment: 'Synthetic development network', persistence: 'Local append-only JSONL audit, registry, and block records', generatedAt: iso(store.now) }; }
 function graph(focus, hops = 2) {
   const actualFocus = store.account(focus) ? focus : store.networkSummary().defaultFocus;
   const data = store.graphAround([actualFocus], { hops: Math.max(1, Math.min(4, hops)), windowSeconds: 86400, maxNodes: 70, maxEdges: 110 });
@@ -78,21 +79,69 @@ function screen(input) {
   const decision = orchestrate({ tvp: knownFlag ? 1 : tvp.score, behavior: behavior.score, graph: graphResult.score });
   const verdict = decision.verdict;
   const reasons = [...new Set([...(knownFlag ? ['Sender or payee is listed in the shared fraud registry'] : []), ...tvp.reasons, ...behavior.reasons, ...graphResult.reasons])];
-  const result = { id: tx.id, at: new Date().toISOString(), from: sender.id, to: receiver.id, fromLabel: sender.label, toLabel: receiver.label, amount: amountRupees, verdict, score: Math.round(decision.score * 1000) / 1000, blendedScore: Math.round(decision.blended * 1000) / 1000, reason: decision.reason, reasons, agents: { tvp: { score: tvp.score, reasons: tvp.reasons }, behavior: { score: behavior.score, reasons: behavior.reasons }, graph: { score: graphResult.score, reasons: graphResult.reasons, subgraph: graphResult.subgraph, messagePassing: graphResult.messagePassing } }, graphEvidence: graphResult, status: verdict === 'APPROVE' ? 'Committed to local DRUNIX ledger' : verdict === 'HOLD' ? 'Awaiting analyst review' : 'Stopped before settlement' };
-  counters.screened++; counters[verdict.toLowerCase()]++; if (verdict === 'BLOCK') counters.stoppedAmount += amountRupees;
+  return { id: tx.id, at: new Date().toISOString(), from: sender.id, to: receiver.id, fromLabel: sender.label, toLabel: receiver.label, amount: amountRupees, verdict, score: Math.round(decision.score * 1000) / 1000, blendedScore: Math.round(decision.blended * 1000) / 1000, reason: decision.reason, reasons, agents: { tvp: { score: tvp.score, reasons: tvp.reasons }, behavior: { score: behavior.score, reasons: behavior.reasons }, graph: { score: graphResult.score, reasons: graphResult.reasons, subgraph: graphResult.subgraph, messagePassing: graphResult.messagePassing } }, graphEvidence: graphResult };
+}
+
+function recordScreening(result) {
+  const verdict = result.verdict, now = Date.parse(result.at) / 1000;
+  counters.screened++;
+  if (verdict === 'APPROVE') counters.approved++;
+  else if (verdict === 'HOLD') counters.held++;
+  else if (verdict === 'BLOCK') { counters.blocked++; counters.stoppedAmount += result.amount; }
   if (verdict === 'APPROVE') {
-    const txEdge = store.addScreenedTransaction({ id: tx.id, from: tx.from, to: tx.to, amount: amountRupees, t: now, truth: 'unknown', hour, deviceId, simId, jumpKm, jumpMin, bot: tx.bot, verdict });
-    const block = { height: counters.approved, transactionId: txEdge.id, amount: amountRupees, at: result.at, previousHash, hash: createHash('sha256').update(`${previousHash}|${txEdge.id}|${amountRupees}|${now}`).digest('hex') };
+    const sender = store.account(result.from);
+    const txEdge = store.addScreenedTransaction({ id: result.id, from: result.from, to: result.to, amount: result.amount, t: now, truth: 'unknown', hour: new Date(now * 1000).getHours(), deviceId: sender?.homeDev, simId: sender?.homeSim, verdict });
+    const block = { height: counters.approved, transactionId: txEdge.id, amount: result.amount, at: result.at, previousHash, hash: createHash('sha256').update(`${previousHash}|${txEdge.id}|${result.amount}|${now}`).digest('hex') };
     previousHash = block.hash; persist(blockPath, block); result.block = block;
   } else if (verdict === 'BLOCK') {
-    const registryRecord = { id: receiver.id, reason: reasons.join('; ') || decision.reason, source: 'TrustMesh risk orchestrator', at: result.at, transactionId: tx.id };
-    store.registry.set(receiver.id, { t: now, why: registryRecord.reason, source: registryRecord.source }); persist(registryPath, registryRecord);
+    const registryRecord = { id: result.to, reason: result.reasons.join('; ') || result.reason, source: 'TrustMesh risk orchestrator', at: result.at, transactionId: result.id };
+    store.registry.set(result.to, { t: now, why: registryRecord.reason, source: registryRecord.source }); persist(registryPath, registryRecord);
   } else reviewQueue.unshift({ ...result, status: 'Pending review' });
-  result.audit = addAudit({ transactionId: tx.id, from: sender.id, to: receiver.id, amount: amountRupees, verdict, score: result.score, reasons });
+  result.audit = addAudit({ transactionId: result.id, from: result.from, to: result.to, amount: result.amount, verdict, score: result.score, reasons: result.reasons, ledgerTransactionId: result.ledger?.transactionId || null });
   recentDecisions.unshift(snapshotDecision(result)); if (recentDecisions.length > 150) recentDecisions.length = 150;
-  profileCache.set(sender.id, { lastScreenedAt: result.at, lastVerdict: verdict });
+  profileCache.set(result.from, { lastScreenedAt: result.at, lastVerdict: verdict });
+  if (result.ledger?.verified) persist(ledgerPath, { ...result.ledger, from: result.from, to: result.to, amount: result.amount, action: 'SCREEN', at: result.ledger.verifiedAt });
   return result;
 }
+
+function localOnlyLedgerRecord(result) {
+  return { provider: 'DRUNIX', mode: 'off', verified: false, transactionId: result.id, verdict: result.verdict, reason: 'Ledger integration disabled by configuration.' };
+}
+
+function ledgerStatusText(result) {
+  if (!result.ledger?.verified) return `Local-only decision · DRUNIX mode ${result.ledger?.mode || 'off'}`;
+  return `DRUNIX ledger verified · ${result.ledger.channel}/${result.ledger.chaincode}`;
+}
+
+function recordReview(item, verdict, ledger) {
+  const now = Date.now() / 1000;
+  item.verdict = verdict;
+  item.ledger = ledger;
+  item.status = verdict === 'APPROVE' ? 'Analyst approved · DRUNIX verified' : 'Rejected · DRUNIX verified';
+  counters.held = Math.max(0, counters.held - 1);
+  if (verdict === 'APPROVE') {
+    counters.approved++;
+    const sender = store.account(item.from);
+    store.addScreenedTransaction({ id: item.id, from: item.from, to: item.to, amount: item.amount, t: now, truth: 'unknown', hour: new Date().getHours(), deviceId: sender?.homeDev, simId: sender?.homeSim, verdict });
+    const block = { height: counters.approved, transactionId: item.id, amount: item.amount, at: new Date().toISOString(), previousHash, hash: createHash('sha256').update(`${previousHash}|${item.id}|${item.amount}|review`).digest('hex') };
+    previousHash = block.hash; persist(blockPath, block); item.block = block;
+  } else {
+    counters.blocked++; counters.stoppedAmount += item.amount;
+    store.registry.set(item.to, { t: now, why: 'Analyst rejected held transaction', source: 'TrustMesh analyst review' });
+    persist(registryPath, { id: item.to, reason: 'Analyst rejected held transaction', source: 'TrustMesh analyst review', at: new Date().toISOString(), transactionId: item.id });
+  }
+  item.audit = addAudit({ transactionId: item.id, from: item.from, to: item.to, amount: item.amount, verdict, review: verdict === 'APPROVE' ? 'analyst-approved' : 'analyst-rejected', ledgerTransactionId: ledger?.verified ? item.id : null });
+  const index = recentDecisions.findIndex(row => row.id === item.id);
+  if (index >= 0) recentDecisions[index] = snapshotDecision(item);
+  if (ledger?.verified) persist(ledgerPath, { ...ledger, from: item.from, to: item.to, amount: item.amount, action: 'REVIEW', at: ledger.verifiedAt });
+  return item;
+}
+
+function readJsonl(file, limit = 100) {
+  if (!fs.existsSync(file)) return [];
+  return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).slice(-limit).reverse().map(line => JSON.parse(line));
+}
+
 function sendStatic(res, pathname) {
   const requested = pathname === '/' ? '/index.html' : decodeURIComponent(pathname), file = path.resolve(ROOT, 'public', `.${requested}`), base = path.resolve(ROOT, 'public') + path.sep;
   if (!file.startsWith(base)) return json(res, 403, { error: 'Forbidden' });
@@ -102,7 +151,7 @@ const app = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`), p = url.pathname;
   try {
     if (req.method === 'OPTIONS') { res.writeHead(204, { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS', 'access-control-allow-headers': 'content-type' }); return res.end(); }
-    if (req.method === 'GET' && p === '/api/health') return json(res, 200, { ok: true, service: 'trustmesh-workbench', uptime: process.uptime() });
+    if (req.method === 'GET' && p === '/api/health') return json(res, 200, { ok: true, service: 'trustmesh-workbench', uptime: process.uptime(), ledger: drunix.publicStatus() });
     if (req.method === 'GET' && p === '/api/overview') return json(res, 200, overview());
     if (req.method === 'GET' && p === '/api/graph') return json(res, 200, graph(url.searchParams.get('focus') || '', Number(url.searchParams.get('hops') || 2)));
     if (req.method === 'GET' && p === '/api/search') return json(res, 200, { results: store.search(url.searchParams.get('q') || '', 12).map(viewNode) });
@@ -111,20 +160,35 @@ const app = http.createServer(async (req, res) => {
     if (req.method === 'GET' && p === '/api/registry') return json(res, 200, { records: [...store.registry].map(([id, r]) => ({ id, label: store.account(id)?.label || id, bank: store.account(id)?.bank, reason: r.why, source: r.source, at: iso(r.t) })).slice(-100).reverse() });
     if (req.method === 'GET' && p === '/api/audit') { const rows = fs.existsSync(auditPath) ? fs.readFileSync(auditPath, 'utf8').trim().split('\n').filter(Boolean).slice(-100).reverse().map(line => JSON.parse(line)) : []; return json(res, 200, { records: rows }); }
     if (req.method === 'GET' && p === '/api/blocks') { const rows = fs.existsSync(blockPath) ? fs.readFileSync(blockPath, 'utf8').trim().split('\n').filter(Boolean).slice(-100).reverse().map(line => JSON.parse(line)) : []; return json(res, 200, { blocks: rows }); }
+    if (req.method === 'GET' && p === '/api/ledger') return json(res, 200, { enabled: drunix.enabled, records: readJsonl(ledgerPath) });
     if (req.method === 'GET' && p === '/api/reviews') return json(res, 200, { reviews: reviewQueue.slice(0, 100) });
-    if (req.method === 'POST' && p === '/api/transactions/analyze') return json(res, 200, screen(await readBody(req)));
+    if (req.method === 'POST' && p === '/api/transactions/analyze') {
+      const result = screen(await readBody(req));
+      result.ledger = drunix.enabled ? await drunix.commitDecision(result) : localOnlyLedgerRecord(result);
+      if (result.ledger.verified && result.ledger.verdict !== result.verdict) {
+        result.verdict = result.ledger.verdict;
+        result.reason = result.ledger.reason;
+        result.reasons = [...new Set([`DRUNIX fraud-registry override: ${result.ledger.reason}`, ...result.reasons])];
+      }
+      result.status = ledgerStatusText(result);
+      return json(res, 200, recordScreening(result));
+    }
+    if (req.method === 'POST' && p === '/api/reviews/reject') {
+      const body = await readBody(req), i = reviewQueue.findIndex(row => row.id === body.id);
+      if (i < 0) return json(res, 404, { error: 'Review item not found' });
+      const item = reviewQueue[i], ledger = drunix.enabled ? await drunix.resolveHold(item, 'BLOCK', 'Analyst rejected held transaction') : localOnlyLedgerRecord(item);
+      reviewQueue.splice(i, 1);
+      return json(res, 200, recordReview(item, 'BLOCK', ledger));
+    }
     if (req.method === 'POST' && p.startsWith('/api/reviews/')) {
       const id = decodeURIComponent(p.slice('/api/reviews/'.length)), i = reviewQueue.findIndex(row => row.id === id); if (i < 0) return json(res, 404, { error: 'Review item not found' });
-      const [item] = reviewQueue.splice(i, 1); item.status = 'Analyst approved'; item.verdict = 'APPROVE'; counters.held = Math.max(0, counters.held - 1); counters.approved++;
-      const reviewedSender = store.account(item.from);
-      store.addScreenedTransaction({ id: item.id, from: item.from, to: item.to, amount: item.amount, t: Date.now() / 1000, truth: 'unknown', hour: new Date().getHours(), deviceId: reviewedSender?.homeDev, simId: reviewedSender?.homeSim, verdict: 'APPROVE' });
-      const block = { height: counters.approved, transactionId: item.id, amount: item.amount, at: new Date().toISOString(), previousHash, hash: createHash('sha256').update(`${previousHash}|${item.id}|${item.amount}|review`).digest('hex') }; previousHash = block.hash; persist(blockPath, block);
-      item.block = block; item.audit = addAudit({ transactionId: item.id, from: item.from, to: item.to, amount: item.amount, verdict: 'APPROVE', review: 'analyst-approved' }); return json(res, 200, item);
+      const item = reviewQueue[i], ledger = drunix.enabled ? await drunix.resolveHold(item, 'APPROVE', 'Analyst approved held transaction') : localOnlyLedgerRecord(item);
+      reviewQueue.splice(i, 1);
+      return json(res, 200, recordReview(item, 'APPROVE', ledger));
     }
-    if (req.method === 'POST' && p === '/api/reviews/reject') { const body = await readBody(req), i = reviewQueue.findIndex(row => row.id === body.id); if (i < 0) return json(res, 404, { error: 'Review item not found' }); const [item] = reviewQueue.splice(i, 1); item.status = 'Rejected by analyst'; item.verdict = 'BLOCK'; counters.held = Math.max(0, counters.held - 1); counters.blocked++; counters.stoppedAmount += item.amount; store.registry.set(item.to, { t: Date.now() / 1000, why: 'Analyst rejected held transaction', source: 'TrustMesh analyst review' }); persist(registryPath, { id: item.to, reason: 'Analyst rejected held transaction', source: 'TrustMesh analyst review', at: new Date().toISOString() }); item.audit = addAudit({ transactionId: item.id, from: item.from, to: item.to, amount: item.amount, verdict: 'BLOCK', review: 'analyst-rejected' }); return json(res, 200, item); }
     if (req.method === 'GET' && p.startsWith('/api/')) return json(res, 404, { error: 'API route not found' });
     return sendStatic(res, p);
-  } catch (error) { return json(res, 400, { error: error.message || 'Request failed' }); }
+  } catch (error) { return json(res, error.statusCode || 400, { error: error.message || 'Request failed', code: error.code || 'REQUEST_FAILED' }); }
 });
 const HOST = process.env.HOST || '127.0.0.1';
 app.listen(PORT, HOST, () => console.log(`TrustMesh workbench listening at http://${HOST}:${PORT} (${store.transactions.length.toLocaleString()} synthetic transactions)`));

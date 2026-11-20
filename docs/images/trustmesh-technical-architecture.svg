@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 960" role="img" aria-labelledby="title desc">
 <title id="title">TrustMesh technical architecture</title>
-<desc id="desc">Technical pipeline from browser UI through Node API, synthetic data and three risk agents, the decision orchestrator, local records and analyst review, with a separate optional DRUNIX chaincode ledger path.</desc>
+<desc id="desc">Technical pipeline from browser UI through Node API, synthetic data and three risk agents, decision policy, DRUNIX chaincode submission and readback, local records and analyst review.</desc>
 <defs>
   <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0 0L9 3L0 6Z" fill="#526985"/></marker>
   <marker id="blueArrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0 0L9 3L0 6Z" fill="#3976c5"/></marker>
@@ -12,7 +12,7 @@
 </defs>
 <rect width="1600" height="960" rx="22" fill="#f4f7fb"/>
 <text x="46" y="52" class="title">TrustMesh · technical architecture</text>
-<text x="46" y="79" class="subtitle">Synthetic pre-settlement screening: request path, graph build, parallel risk scoring, decision state and optional ledger adapter</text>
+<text x="46" y="79" class="subtitle">Synthetic pre-settlement screening: request path, graph build, parallel risk scoring, DRUNIX ledger commit and verified response</text>
 
 <text x="48" y="120" class="lane">1 · CLIENT AND API</text>
 <rect x="46" y="138" width="320" height="170" rx="16" fill="#fff" stroke="#aebed1" stroke-width="2"/>
@@ -68,14 +68,14 @@
 <text x="1131" y="670" class="body">BLOCK → stop before settlement · registry / audit</text>
 <text x="1131" y="701" class="small">data/ append-only local journals · response refreshes graph + tabs</text>
 
-<text x="48" y="772" class="lane">5 · OPTIONAL LEDGER INTEGRATION · SEPARATE TEST-NET WORKFLOW</text>
+<text x="48" y="772" class="lane">5 · DRUNIX LEDGER COMMIT AND READBACK · REQUIRED BY DEFAULT</text>
 <rect x="46" y="792" width="450" height="116" rx="16" fill="#eef1f6" stroke="#9aa9bb" stroke-width="2"/>
-<text x="72" y="828" class="head">GitHub Actions DRUNIX smoke workflow</text><text x="72" y="858" class="body">Builds sandbox · screens three synthetic cases</text><text x="72" y="884" class="small">Not invoked by ordinary local browser submissions</text>
+<text x="72" y="828" class="head">Node DRUNIX adapter</text><text x="72" y="858" class="body">Submits hashed identities + agent scores</text><text x="72" y="884" class="small">server/ledger/drunix-client.cjs</text>
 <rect x="575" y="792" width="450" height="116" rx="16" fill="#eef1f6" stroke="#9aa9bb" stroke-width="2"/>
-<text x="601" y="828" class="head">Go chaincode contracts</text><text x="601" y="858" class="body">TransactionGate · FraudRegistry · AuditTrail</text><text x="601" y="884" class="small">chaincode/trustmesh/</text>
+<text x="601" y="828" class="head">Go chaincode contracts</text><text x="601" y="858" class="body">Evaluate · ResolveHold · fraud registry</text><text x="601" y="884" class="small">chaincode/trustmesh/ · AuditTrail</text>
 <rect x="1105" y="792" width="447" height="116" rx="16" fill="#eef1f6" stroke="#9aa9bb" stroke-width="2"/>
-<text x="1131" y="828" class="head">Isolated DRUNIX ledger state</text><text x="1131" y="858" class="body">Two-organization sandbox · decision + audit reads</text><text x="1131" y="884" class="small">Synthetic transactions only · no payment settlement</text>
-<path d="M496 850H565M1025 850H1095" stroke="#526985" stroke-width="2.5" stroke-dasharray="7 6" marker-end="url(#arrow)"/>
-<path d="M790 726V750H271V782M800 750H800V782" fill="none" stroke="#8898aa" stroke-width="2" stroke-dasharray="6 6" marker-end="url(#arrow)"/>
-<rect x="1243" y="735" width="309" height="34" rx="10" fill="#f4f7fb"/><text x="1397" y="758" text-anchor="middle" class="small">Dashed = optional workflow boundary</text>
+<text x="1131" y="828" class="head">DRUNIX ledger + readback</text><text x="1131" y="858" class="body">Decision + audit verified before response</text><text x="1131" y="884" class="small">Synthetic transactions only · no payment settlement</text>
+<path d="M496 850H565M1025 850H1095" stroke="#3976c5" stroke-width="3" marker-end="url(#blueArrow)"/>
+<path d="M790 726V750H271V782" fill="none" stroke="#3976c5" stroke-width="3" marker-end="url(#blueArrow)"/>
+<rect x="1243" y="735" width="309" height="34" rx="10" fill="#f4f7fb"/><text x="1397" y="758" text-anchor="middle" class="small">Response waits for verified ledger state</text>
 </svg>

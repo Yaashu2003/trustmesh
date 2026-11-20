@@ -12,7 +12,7 @@ Requires Node.js 20 or newer. The prototype uses only Node's built-in modules.
 npm start
 ```
 
-Open [http://127.0.0.1:4173](http://127.0.0.1:4173). By default the server generates 300,000 synthetic transactions at startup. Set `TRUSTMESH_TRANSACTIONS` to a value from 1,000 through 500,000 to change the size, and `PORT` to change the local port.
+Open [http://127.0.0.1:4173](http://127.0.0.1:4173). By default the server generates 300,000 synthetic transactions at startup. Set `TRUSTMESH_TRANSACTIONS` to a value from 1,000 through 500,000 to change the size, and `PORT` to change the local port. The default ledger mode is `required`: a decision is complete only after DRUNIX commits it and the API reads the decision and audit record back. Start the DRUNIX test network first (see [Run with a local DRUNIX network](#run-with-a-local-drunix-network)).
 
 ## Workbench
 
@@ -94,13 +94,29 @@ See [Example runs](docs/EXAMPLE_RUNS.md) for the complete click-by-click explana
 
 Decision records, registry changes, and approved local block records append to ignored files under `data/`.
 
-## Integration boundary
+## DRUNIX integration
 
-This is a local prototype. The network, payments, and account identities are synthetic. The DRUNIX sandbox status labels the intended integration environment; this app does not claim to connect to live bank rails, a live DRUNIX peer network, KeyDB, YugabyteDB, gRPC, ONNX, or Kubernetes. The adapters and Go contracts are integration starting points; deployment credentials and network configuration are still required for live use.
+Every payment screened from the UI/API is submitted to the local DRUNIX test network by default. The Node API computes the three-agent decision, invokes `TransactionGate:Evaluate`, then queries `TransactionGate:ReadDecision` and `AuditTrail:Read`. Only after that readback matches does it record a successful decision in the workbench. Approve/reject actions on held payments invoke `TransactionGate:ResolveHold` and verify the review audit entry. A rejected payee is registered by chaincode. The **DRUNIX ledger** tab lists verified ledger writes. Sender and receiver identifiers are SHA-256 hashed before they are placed on-chain.
+
+The network, payments, and identities are synthetic. This is not connected to live bank rails. `TRUSTMESH_DRUNIX_MODE=off` is available for UI-only development; it skips blockchain writes and labels the resulting decisions local-only.
+
+### Run with a local DRUNIX network
+
+Start Docker Desktop and the DRUNIX test network, then deploy `chaincode/trustmesh` to channel `mychannel` under chaincode name `trustmesh`. Start TrustMesh in the same Linux/WSL environment that can run the DRUNIX `peer` CLI:
+
+```bash
+TRUSTMESH_DRUNIX_MODE=required \
+DRUNIX_TEST_NETWORK=/path/to/drunix-platform/drunix-network/test-network \
+DRUNIX_CHANNEL=mychannel \
+DRUNIX_CHAINCODE=trustmesh \
+npm start
+```
+
+`GET /api/health` reports the configured mode. A successful screen response contains `ledger.verified: true`. In required mode an unavailable peer returns a service error instead of presenting an uncommitted transaction as ledger verified.
 
 ### Run the on-chain DRUNIX smoke workflow
 
-The [Yaashu2003/drunix fork](https://github.com/Yaashu2003/drunix) includes a manual GitHub Actions workflow: [TrustMesh on DRUNIX test network](https://github.com/Yaashu2003/drunix/actions/workflows/trustmesh-testnet-smoke.yml). Open the **Actions** tab, select that workflow, and choose **Run workflow**. It uses a standard public Ubuntu runner, builds the DRUNIX tools, starts the two-organization test network, deploys this repository's TrustMesh chaincode, screens three synthetic payments through the Node API, submits the actual decisions to the test peer, and queries the payment and audit records back from ledger state.
+The [Yaashu2003/drunix fork](https://github.com/Yaashu2003/drunix) includes a manual GitHub Actions workflow: [TrustMesh on DRUNIX test network](https://github.com/Yaashu2003/drunix/actions/workflows/trustmesh-testnet-smoke.yml). It runs the same chaincode integration against an ephemeral two-organization test network.
 
 The runner is temporary and tears down the network after the run. These are real ledger writes in an isolated DRUNIX test network, not real UPI transfers. Standard GitHub-hosted runners are free for public repositories; the workflow doesn't use Docker Desktop subscriptions or paid services. See [GitHub Actions billing](https://docs.github.com/en/actions/concepts/billing-and-usage).
 

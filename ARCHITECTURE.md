@@ -4,9 +4,9 @@ TrustMesh is a synthetic UPI pre-settlement fraud-screening prototype. It is not
 
 ## Technical architecture and request pipeline
 
-![TrustMesh technical architecture diagram showing the browser workbench, Node API, synthetic network store, graph/search endpoints, three parallel risk agents, policy orchestrator, local decision and review records, and a separate optional DRUNIX ledger workflow](docs/images/trustmesh-technical-architecture.svg)
+![TrustMesh technical architecture diagram showing the browser workbench, Node API, synthetic graph store, three risk agents, policy orchestrator, DRUNIX transaction gate, fraud registry, and verified ledger readback](docs/images/trustmesh-technical-architecture.svg)
 
-The diagram separates the **normal local request path** from the **optional ledger workflow**. A browser request reaches the Node API; the API enriches it with synthetic account and relationship context, runs all three scoring agents, and sends their output to the deterministic orchestrator. The API returns a decision and evidence to the browser, records the local outcome, and refreshes the graph and decision tabs. The lower dashed path is a separate GitHub Actions/DRUNIX smoke workflow; normal browser screening does not call a DRUNIX peer.
+The regular browser request path includes DRUNIX. The API enriches requests with synthetic account and relationship context, runs all three scoring agents, applies policy, invokes the DRUNIX `TransactionGate`, and reads the committed decision and `AuditTrail` back before returning a successful result. Analyst review actions are committed and verified too. GitHub Actions provides a separate clean-network smoke run.
 
 At startup, `server/data-store.cjs` generates synthetic accounts, merchants, devices, SIM identities and payment history, then prepares indexes used by neighborhood graph queries, search and account profiles. `GET /api/graph` returns the focused nodes, payment edges and identity links for the UI. The graph agent evaluates network patterns from the same underlying synthetic data. A graph is therefore available as soon as the UI/API finish loading; screening a transaction adds a new relationship and recent risk evidence.
 
@@ -20,7 +20,7 @@ At startup, `server/data-store.cjs` generates synthetic accounts, merchants, dev
 | Parallel risk analysis | `server/agents/transaction-pattern.cjs`, `behavioral-biometric.cjs`, `graph-network.cjs` | Scores transaction behavior, identity signals and network structure independently | Three scores with reason lists |
 | Policy | `server/agents/orchestrator.cjs` | Applies the maximum-score veto and blended-risk thresholds | `APPROVE`, `HOLD` or `BLOCK` |
 | Local response | `server.js`, `data/` | Updates recent decisions, held queue or block journal and audit/registry records | JSON response, updated tabs and graph |
-| Optional ledger | `.github/workflows/` + `chaincode/trustmesh/` | Runs an isolated DRUNIX network and submits its three smoke-case decisions | On-chain transaction gate and audit entries |
+| Ledger integration | `server/ledger/drunix-client.cjs` + `chaincode/trustmesh/` | Submits each screening and review, then verifies on-chain readback | Transaction gate, fraud registry, and audit entries |
 
 ### System boundaries
 
@@ -42,7 +42,7 @@ At startup, `server/data-store.cjs` generates synthetic accounts, merchants, dev
 | Decision orchestrator | `server/agents/orchestrator.cjs` | Blends the three scores. Any maximum score above 0.85 vetoes to `BLOCK`; otherwise blended risk above 0.60 becomes `HOLD`; remaining payments are `APPROVE`. |
 | Local storage adapters | `server/storage/` and `data/` | In-memory KeyDB-like profile and graph adapters support the prototype. Local decisions, reviews and audit/registry records persist under `data/` (ignored by Git). These are not deployed KeyDB/YugabyteDB services. |
 | Ledger contracts | `chaincode/trustmesh/*.go` | Go chaincode defines `TransactionGate`, `FraudRegistry`, and `AuditTrail`. `Evaluate` checks score ranges and deterministic policy, checks the registry, prevents duplicate transaction IDs, and writes the decision and audit record to ledger state. |
-| DRUNIX network integration | `drunix-platform/` fork + GitHub Actions workflow | Builds DRUNIX, starts its two-organization test network, deploys TrustMesh chaincode, submits synthetic screening results, and queries ledger state back. Workflow runs are temporary and do not move money. |
+| DRUNIX network integration | `server/ledger/`, `drunix-platform/` fork + GitHub Actions workflow | The Node adapter invokes chaincode and queries committed state; workflow runs provide a clean temporary network. No real payments move. |
 
 ## Knowledge graph
 
@@ -54,11 +54,11 @@ The graph is an entity relationship view, not a standard chart. Nodes represent 
 2. The backend constructs a synthetic transaction and runs TVP, behavioral and graph agents.
 3. The orchestrator returns `APPROVE`, `HOLD` or `BLOCK` with scores and explanations.
 4. The workbench displays the result. `HOLD` goes to analyst review; approval commits the prototype decision, while rejection blocks and adds the payee to the local registry.
-5. In the separate DRUNIX workflow, the same Node API screens three scenarios. The workflow submits a privacy-preserving attestation with account hashes and scores to `TransactionGate:Evaluate`, then queries both `TransactionGate:ReadDecision` and `AuditTrail:Read` from a peer.
+5. The Node adapter submits a privacy-preserving attestation with account hashes and scores to `TransactionGate:Evaluate`, then queries `TransactionGate:ReadDecision` and `AuditTrail:Read`. The API only reports success after matching readback. Review invokes `TransactionGate:ResolveHold` and verifies the separate review audit entry.
 
 ## Run locally
 
-Requirements: Node.js 20 or newer. No Docker is required for the local UI and synthetic screening prototype. Docker and Go 1.26.1 are required for the optional DRUNIX ledger network.
+Requirements: Node.js 20 or newer, Docker, Go, and a deployed DRUNIX test network for default required-ledger mode. Set `TRUSTMESH_DRUNIX_MODE=off` only when developing the UI without blockchain writes.
 
 ```powershell
 npm start
@@ -128,4 +128,4 @@ The local network is a developer sandbox. These writes do not touch real payment
 
 ## Scope and deployment boundary
 
-The local workbench and synthetic scoring API are runnable now. The public workflow is the real DRUNIX test-ledger integration path. The prototype does not claim live UPI access, production identity verification, deployed KeyDB/YugabyteDB, hosted gRPC inference, ONNX model serving, Kubernetes orchestration, or a persistent production DRUNIX network. Those require real services, credentials, infrastructure and security review.
+The workbench uses synthetic data and a local DRUNIX development network. It does not claim live UPI access, production identity verification, deployed KeyDB/YugabyteDB services, hosted gRPC inference, ONNX model serving, Kubernetes orchestration, or a persistent production DRUNIX network. Those require real services, credentials, infrastructure and security review.
